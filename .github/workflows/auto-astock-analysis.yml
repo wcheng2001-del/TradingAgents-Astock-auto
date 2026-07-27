@@ -5,23 +5,6 @@ on:
     # Tuesday, Thursday, Saturday Beijing 06:00 = previous UTC day 22:00
     - cron: "0 22 * * 1,3,5"
   workflow_dispatch:
-    inputs:
-      stock_list:
-        description: "Comma-separated stock list"
-        required: false
-        default: ""
-      provider:
-        description: "LLM provider"
-        required: false
-        default: "deepseek"
-        type: choice
-        options:
-          - deepseek
-          - qwen-cn
-      trade_date:
-        description: "Optional trade date YYYY-MM-DD"
-        required: false
-        default: ""
 
 concurrency:
   group: tradingagents-astock-auto
@@ -49,9 +32,9 @@ jobs:
 
       - name: Run analysis
         env:
-          STOCK_LIST: ${{ github.event.inputs.stock_list || vars.STOCK_LIST || '600519' }}
-          TRADINGAGENTS_TRADE_DATE: ${{ github.event.inputs.trade_date || vars.TRADINGAGENTS_TRADE_DATE }}
-          TRADINGAGENTS_LLM_PROVIDER: ${{ github.event.inputs.provider || vars.TRADINGAGENTS_LLM_PROVIDER || 'deepseek' }}
+          STOCK_LIST: ${{ vars.STOCK_LIST || '600519' }}
+          TRADINGAGENTS_TRADE_DATE: ${{ vars.TRADINGAGENTS_TRADE_DATE }}
+          TRADINGAGENTS_LLM_PROVIDER: ${{ vars.TRADINGAGENTS_LLM_PROVIDER || 'deepseek' }}
           TRADINGAGENTS_DEEP_THINK_LLM: ${{ vars.TRADINGAGENTS_DEEP_THINK_LLM || 'deepseek-v4-pro' }}
           TRADINGAGENTS_QUICK_THINK_LLM: ${{ vars.TRADINGAGENTS_QUICK_THINK_LLM || 'deepseek-v4-flash' }}
           TRADINGAGENTS_OUTPUT_LANGUAGE: ${{ vars.TRADINGAGENTS_OUTPUT_LANGUAGE || 'Chinese' }}
