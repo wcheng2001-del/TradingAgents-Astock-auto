@@ -3,7 +3,7 @@ name: TradingAgents Astock Auto Analysis
 on:
   schedule:
     # Tuesday, Thursday, Saturday Beijing 06:00 = previous UTC day 22:00
-    - cron: "0 22 * * 1,3,5"
+    - cron: "0 21 * * 1,3,5"
   workflow_dispatch:
 
 concurrency:
