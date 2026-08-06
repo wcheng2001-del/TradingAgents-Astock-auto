@@ -18,9 +18,11 @@ from langchain_core.prompt_values import ChatPromptValue
 
 from tradingagents.llm_clients.openai_client import (
     DeepSeekChatOpenAI,
+    OpenAIClient,
     NormalizedChatOpenAI,
     _input_to_messages,
 )
+from tradingagents.graph.trading_graph import TradingAgentsGraph
 
 
 # ---------------------------------------------------------------------------
@@ -151,6 +153,49 @@ class TestDeepSeekReasonerStructuredOutput:
         # require a real key; we only assert binding succeeds.)
         wrapped = client.with_structured_output(_Sample)
         assert wrapped is not None
+
+
+@pytest.mark.unit
+class TestDeepSeekThinkingControls:
+    def test_graph_kwargs_from_config(self):
+        graph = object.__new__(TradingAgentsGraph)
+        graph.config = {
+            "llm_provider": "deepseek",
+            "deepseek_thinking_enabled": True,
+            "deepseek_reasoning_effort": "max",
+        }
+
+        kwargs = graph._get_provider_kwargs()
+
+        assert kwargs["extra_body"] == {"thinking": {"type": "enabled"}}
+        assert kwargs["reasoning_effort"] == "max"
+
+    def test_graph_kwargs_from_env(self, monkeypatch):
+        monkeypatch.setenv("DEEPSEEK_THINKING_ENABLED", "false")
+        monkeypatch.setenv("DEEPSEEK_REASONING_EFFORT", "high")
+        graph = object.__new__(TradingAgentsGraph)
+        graph.config = {"llm_provider": "deepseek"}
+
+        kwargs = graph._get_provider_kwargs()
+
+        assert kwargs["extra_body"] == {"thinking": {"type": "disabled"}}
+        assert kwargs["reasoning_effort"] == "high"
+
+    def test_openai_client_forwards_extra_body(self, monkeypatch):
+        monkeypatch.setenv("DEEPSEEK_API_KEY", "placeholder")
+        client = OpenAIClient(
+            "deepseek-v4-flash",
+            provider="deepseek",
+            extra_body={"thinking": {"type": "enabled"}},
+            reasoning_effort="max",
+        )
+
+        llm = client.get_llm()
+
+        extra_body = getattr(llm, "extra_body", None) or llm.model_kwargs.get("extra_body")
+        reasoning_effort = getattr(llm, "reasoning_effort", None) or llm.model_kwargs.get("reasoning_effort")
+        assert extra_body == {"thinking": {"type": "enabled"}}
+        assert reasoning_effort == "max"
 
 
 # ---------------------------------------------------------------------------

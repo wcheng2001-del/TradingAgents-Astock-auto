@@ -36,6 +36,13 @@ def split_csv(value: str) -> list[str]:
     return [item.strip() for item in value.split(",") if item.strip()]
 
 
+def env_bool_or_none(name: str) -> bool | None:
+    value = os.getenv(name)
+    if value is None or not value.strip():
+        return None
+    return value.strip().lower() not in ("0", "false", "no", "off")
+
+
 def build_config() -> dict:
     provider = env("TRADINGAGENTS_LLM_PROVIDER", "deepseek")
     quick_model = env("TRADINGAGENTS_QUICK_THINK_LLM", "deepseek-v4-flash")
@@ -48,6 +55,8 @@ def build_config() -> dict:
     config["output_language"] = env("TRADINGAGENTS_OUTPUT_LANGUAGE", "Chinese")
     config["max_debate_rounds"] = int(env("TRADINGAGENTS_MAX_DEBATE_ROUNDS", "1"))
     config["max_risk_discuss_rounds"] = int(env("TRADINGAGENTS_MAX_RISK_ROUNDS", "1"))
+    config["deepseek_thinking_enabled"] = env_bool_or_none("DEEPSEEK_THINKING_ENABLED")
+    config["deepseek_reasoning_effort"] = env("DEEPSEEK_REASONING_EFFORT")
     config["data_vendors"] = {
         "core_stock_apis": "a_stock",
         "technical_indicators": "a_stock",

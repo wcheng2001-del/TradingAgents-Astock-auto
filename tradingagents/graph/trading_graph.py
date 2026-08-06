@@ -158,6 +158,33 @@ class TradingAgentsGraph:
             if effort:
                 kwargs["effort"] = effort
 
+        elif provider == "deepseek":
+            thinking_enabled = self.config.get("deepseek_thinking_enabled")
+            if thinking_enabled is None:
+                thinking_raw = os.getenv("DEEPSEEK_THINKING_ENABLED")
+                if thinking_raw is not None and thinking_raw.strip():
+                    thinking_enabled = thinking_raw.strip().lower() not in (
+                        "0",
+                        "false",
+                        "no",
+                        "off",
+                    )
+            if thinking_enabled is not None:
+                kwargs["extra_body"] = {
+                    "thinking": {
+                        "type": "enabled" if bool(thinking_enabled) else "disabled"
+                    }
+                }
+
+            reasoning_effort = (
+                self.config.get("deepseek_reasoning_effort")
+                or os.getenv("DEEPSEEK_REASONING_EFFORT")
+            )
+            if reasoning_effort:
+                normalized_effort = str(reasoning_effort).strip().lower()
+                if normalized_effort in {"low", "high", "max"}:
+                    kwargs["reasoning_effort"] = normalized_effort
+
         return kwargs
 
     def _create_tool_nodes(self) -> Dict[str, ToolNode]:

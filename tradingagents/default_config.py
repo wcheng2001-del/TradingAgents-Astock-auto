@@ -25,6 +25,8 @@ DEFAULT_CONFIG = {
     "google_thinking_level": None,      # "high", "minimal", etc.
     "openai_reasoning_effort": None,    # "medium", "high", "low"
     "anthropic_effort": None,           # "high", "medium", "low"
+    "deepseek_thinking_enabled": None,   # True/False; maps to thinking.type
+    "deepseek_reasoning_effort": None,   # "low", "high", "max"
     # Checkpoint/resume: when True, LangGraph saves state after each node
     # so a crashed run can resume from the last successful step.
     "checkpoint_enabled": False,

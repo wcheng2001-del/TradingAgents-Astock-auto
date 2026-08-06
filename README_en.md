@@ -159,6 +159,9 @@ MINIMAX_API_KEY=sk-xxx
 
 # ── Option B: DeepSeek ─────────────────────────────────────────────────────
 DEEPSEEK_API_KEY=sk-xxx
+# Optional: DeepSeek V4 thinking controls
+DEEPSEEK_THINKING_ENABLED=true
+DEEPSEEK_REASONING_EFFORT=max
 # Apply at: https://platform.deepseek.com/
 
 # ── Option C: Zhipu GLM ────────────────────────────────────────────────────

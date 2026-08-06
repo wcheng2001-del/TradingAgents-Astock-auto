@@ -168,6 +168,9 @@ MINIMAX_API_KEY=sk-xxx
 
 # ── 方案 B：DeepSeek ─────────────────────────────────
 DEEPSEEK_API_KEY=sk-xxx
+# 可选：DeepSeek V4 thinking 控制
+DEEPSEEK_THINKING_ENABLED=true
+DEEPSEEK_REASONING_EFFORT=max
 # 申请地址：https://platform.deepseek.com/
 
 # ── 方案 C：智谱 GLM ─────────────────────────────────
