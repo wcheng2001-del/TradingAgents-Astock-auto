@@ -53,6 +53,39 @@ class TraderAction(str, Enum):
     SELL = "Sell"
 
 
+_RATING_ZH = {
+    PortfolioRating.BUY: "买入",
+    PortfolioRating.OVERWEIGHT: "增持",
+    PortfolioRating.HOLD: "持有",
+    PortfolioRating.UNDERWEIGHT: "低配",
+    PortfolioRating.SELL: "卖出",
+}
+
+_ACTION_ZH = {
+    TraderAction.BUY: "买入",
+    TraderAction.HOLD: "持有",
+    TraderAction.SELL: "卖出",
+}
+
+
+def _is_chinese_output() -> bool:
+    try:
+        from tradingagents.dataflows.config import get_config
+
+        lang = get_config().get("output_language", "English").strip().lower()
+    except Exception:
+        lang = "english"
+    return lang in {"chinese", "zh", "zh-cn", "中文", "简体中文"}
+
+
+def _rating_label(rating: PortfolioRating) -> str:
+    return _RATING_ZH.get(rating, rating.value) if _is_chinese_output() else rating.value
+
+
+def _action_label(action: TraderAction) -> str:
+    return _ACTION_ZH.get(action, action.value) if _is_chinese_output() else action.value
+
+
 # ---------------------------------------------------------------------------
 # Research Manager
 # ---------------------------------------------------------------------------
@@ -92,6 +125,14 @@ class ResearchPlan(BaseModel):
 
 def render_research_plan(plan: ResearchPlan) -> str:
     """Render a ResearchPlan to markdown for storage and the trader's prompt context."""
+    if _is_chinese_output():
+        return "\n".join([
+            f"**投资建议**: {_rating_label(plan.recommendation)}",
+            "",
+            f"**核心理由**: {plan.rationale}",
+            "",
+            f"**策略行动**: {plan.strategic_actions}",
+        ])
     return "\n".join([
         f"**Recommendation**: {plan.recommendation.value}",
         "",
@@ -139,6 +180,14 @@ def render_trader_proposal(proposal: TraderProposal) -> str:
     preserved for backward compatibility with the analyst stop-signal text
     and any external code that greps for it.
     """
+    if _is_chinese_output():
+        return "\n".join([
+            f"**操作方向**: {_action_label(proposal.action)}",
+            "",
+            f"**交易理由**: {proposal.reasoning}",
+            "",
+            f"最终交易建议：**{_action_label(proposal.action)}**",
+        ])
     return "\n".join([
         f"**Action**: {proposal.action.value}",
         "",
@@ -199,6 +248,18 @@ def render_pm_decision(decision: PortfolioDecision) -> str:
     ``**Executive Summary**``, ``**Investment Thesis**``) that downstream
     parsers and the report writers already handle.
     """
+    if _is_chinese_output():
+        parts = [
+            f"**最终评级**: {_rating_label(decision.rating)}",
+            "",
+            f"**执行摘要**: {decision.executive_summary}",
+            "",
+            f"**投资论点**: {decision.investment_thesis}",
+        ]
+        if decision.time_horizon:
+            parts.extend(["", f"**时间周期**: {decision.time_horizon}"])
+        return "\n".join(parts)
+
     parts = [
         f"**Rating**: {decision.rating.value}",
         "",
