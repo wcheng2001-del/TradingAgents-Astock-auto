@@ -189,6 +189,18 @@ class TradingAgentsGraph:
 
     def _create_tool_nodes(self) -> Dict[str, ToolNode]:
         """Create tool nodes for different data sources using abstract methods."""
+        a_stock_signal_tools = self.config.get("market_type", "a_stock") == "a_stock"
+        fundamentals_tools = [
+            get_fundamentals,
+            get_balance_sheet,
+            get_cashflow,
+            get_income_statement,
+        ]
+        if a_stock_signal_tools:
+            fundamentals_tools.extend([
+                get_profit_forecast,
+                get_industry_comparison,
+            ])
         return {
             "market": ToolNode(
                 [
@@ -213,14 +225,7 @@ class TradingAgentsGraph:
                 ]
             ),
             "fundamentals": ToolNode(
-                [
-                    get_fundamentals,
-                    get_balance_sheet,
-                    get_cashflow,
-                    get_income_statement,
-                    get_profit_forecast,
-                    get_industry_comparison,
-                ]
+                fundamentals_tools
             ),
             "policy": ToolNode(
                 [

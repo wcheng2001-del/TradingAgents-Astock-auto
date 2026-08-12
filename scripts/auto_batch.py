@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import smtplib
 import time
 import zipfile
@@ -27,6 +28,27 @@ SMTP_CONFIGS = {
     "126.com": ("smtp.126.com", 465),
 }
 
+ASTOCK_ANALYSTS = ["market", "social", "news", "fundamentals", "policy", "hot_money", "lockup"]
+US_STOCK_ANALYSTS = ["market", "social", "news", "fundamentals"]
+
+ASTOCK_VENDOR_CONFIG = {
+    "core_stock_apis": "a_stock",
+    "technical_indicators": "a_stock",
+    "fundamental_data": "a_stock",
+    "news_data": "a_stock",
+    "signal_data": "a_stock",
+}
+
+US_VENDOR_CONFIG = {
+    "core_stock_apis": "yfinance",
+    "technical_indicators": "yfinance",
+    "fundamental_data": "yfinance",
+    "news_data": "yfinance",
+    # Signal tools are A-share only. They stay configured but are not selected
+    # for US-stock auto runs.
+    "signal_data": "a_stock",
+}
+
 
 def env(name: str, default: str = "") -> str:
     return (os.getenv(name) or default).strip()
@@ -43,10 +65,45 @@ def env_bool_or_none(name: str) -> bool | None:
     return value.strip().lower() not in ("0", "false", "no", "off")
 
 
-def build_config() -> dict:
+def env_bool(name: str, default: bool = False) -> bool:
+    value = os.getenv(name)
+    if value is None or not value.strip():
+        return default
+    return value.strip().lower() not in ("0", "false", "no", "off")
+
+
+def normalize_ticker(ticker: str) -> str:
+    return ticker.strip().upper()
+
+
+def is_astock_ticker(ticker: str) -> bool:
+    return re.fullmatch(r"\d{6}", normalize_ticker(ticker)) is not None
+
+
+def detect_market(ticker: str) -> str:
+    forced = env("TRADINGAGENTS_MARKET", "auto").lower().replace("-", "_")
+    if forced in {"a_stock", "astock", "cn", "china"}:
+        return "a_stock"
+    if forced in {"us", "us_stock", "yfinance"}:
+        return "us_stock"
+    return "a_stock" if is_astock_ticker(ticker) else "us_stock"
+
+
+def analysts_for_market(market: str) -> list[str]:
+    override = split_csv(env("TRADINGAGENTS_ANALYSTS"))
+    if override:
+        return override
+
+    if market == "a_stock":
+        return split_csv(env("TRADINGAGENTS_ASTOCK_ANALYSTS")) or ASTOCK_ANALYSTS.copy()
+    return split_csv(env("TRADINGAGENTS_US_ANALYSTS")) or US_STOCK_ANALYSTS.copy()
+
+
+def build_config(market: str = "a_stock") -> dict:
     provider = env("TRADINGAGENTS_LLM_PROVIDER", "deepseek")
     quick_model = env("TRADINGAGENTS_QUICK_THINK_LLM", "deepseek-v4-flash")
     deep_model = env("TRADINGAGENTS_DEEP_THINK_LLM", "deepseek-v4-pro")
+    vendor = env("TRADINGAGENTS_DATA_VENDOR", "auto").lower()
 
     config = DEFAULT_CONFIG.copy()
     config["llm_provider"] = provider
@@ -57,20 +114,36 @@ def build_config() -> dict:
     config["max_risk_discuss_rounds"] = int(env("TRADINGAGENTS_MAX_RISK_ROUNDS", "1"))
     config["deepseek_thinking_enabled"] = env_bool_or_none("DEEPSEEK_THINKING_ENABLED")
     config["deepseek_reasoning_effort"] = env("DEEPSEEK_REASONING_EFFORT")
-    config["data_vendors"] = {
-        "core_stock_apis": "a_stock",
-        "technical_indicators": "a_stock",
-        "fundamental_data": "a_stock",
-        "news_data": "a_stock",
-        "signal_data": "a_stock",
-    }
+    config["market_type"] = market
+
+    if vendor in {"a_stock", "astock"}:
+        config["data_vendors"] = ASTOCK_VENDOR_CONFIG.copy()
+    elif vendor in {"yfinance", "us", "us_stock"}:
+        config["data_vendors"] = US_VENDOR_CONFIG.copy()
+    else:
+        config["data_vendors"] = (
+            ASTOCK_VENDOR_CONFIG.copy() if market == "a_stock" else US_VENDOR_CONFIG.copy()
+        )
     return config
 
 
-def run_stock(ticker: str, trade_date: str, output_root: Path, config: dict) -> Path | None:
-    print(f"Analyzing {ticker} for {trade_date}")
+def run_stock(ticker: str, trade_date: str, output_root: Path) -> Path | None:
+    ticker = normalize_ticker(ticker)
+    market = detect_market(ticker)
+    config = build_config(market)
+    analysts = analysts_for_market(market)
+
+    print(f"Analyzing {ticker} for {trade_date} (market={market}, analysts={','.join(analysts)})")
+    print(
+        "Data vendors: "
+        + ", ".join(f"{key}={value}" for key, value in config["data_vendors"].items())
+    )
     started = time.time()
-    ta = TradingAgentsGraph(debug=True, config=config)
+    ta = TradingAgentsGraph(
+        selected_analysts=analysts,
+        debug=env_bool("TRADINGAGENTS_DEBUG", False),
+        config=config,
+    )
     try:
         final_state, decision = ta.propagate(ticker, trade_date)
     except Exception as exc:
@@ -85,6 +158,8 @@ def run_stock(ticker: str, trade_date: str, output_root: Path, config: dict) -> 
         "\n".join(
             [
                 f"ticker={ticker}",
+                f"market={market}",
+                f"analysts={','.join(analysts)}",
                 f"trade_date={trade_date}",
                 f"duration_seconds={round(time.time() - started)}",
                 f"decision={decision}",
@@ -248,16 +323,16 @@ def main() -> int:
     output_root = Path(env("TRADINGAGENTS_RESULTS_DIR", "reports/auto")) / run_stamp
     output_root.mkdir(parents=True, exist_ok=True)
 
-    config = build_config()
+    preview_config = build_config(detect_market(stocks[0]) if stocks else "a_stock")
     print(
         "LLM profile: "
-        f"provider={config['llm_provider']}, "
-        f"quick={config['quick_think_llm']}, "
-        f"deep={config['deep_think_llm']}"
+        f"provider={preview_config['llm_provider']}, "
+        f"quick={preview_config['quick_think_llm']}, "
+        f"deep={preview_config['deep_think_llm']}"
     )
     print(f"Stocks: {', '.join(stocks)}")
 
-    reports = [run_stock(stock, trade_date, output_root, config) for stock in stocks]
+    reports = [run_stock(stock, trade_date, output_root) for stock in stocks]
     success_count = sum(1 for report in reports if report is not None)
     zip_path = make_zip(output_root)
 
@@ -268,9 +343,9 @@ def main() -> int:
             f"Trade date: {trade_date}",
             f"Stocks: {', '.join(stocks)}",
             f"Successful reports: {success_count}/{len(stocks)}",
-            f"LLM provider: {config['llm_provider']}",
-            f"Quick model: {config['quick_think_llm']}",
-            f"Deep model: {config['deep_think_llm']}",
+            f"LLM provider: {preview_config['llm_provider']}",
+            f"Quick model: {preview_config['quick_think_llm']}",
+            f"Deep model: {preview_config['deep_think_llm']}",
         ]
     )
     send_email(subject, body, zip_path)

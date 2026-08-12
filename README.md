@@ -195,6 +195,26 @@ OPENAI_COMPATIBLE_API_KEY=sk-xxx     # 也接受 OPENAI_API_KEY
 BACKEND_URL=https://your-relay.example/v1   # 你的网关地址（也可在 Web 侧栏「API Base URL」填）
 ```
 
+### GitHub Actions auto runs: A-share and US stock support
+
+`scripts/auto_batch.py` detects the market from `STOCK_LIST`:
+
+| Ticker format | Market | Data vendor | Default analysts |
+|---|---|---|---|
+| `600519`, `000001`, `300750` | A-share | `a_stock` | `market,social,news,fundamentals,policy,hot_money,lockup` |
+| `APP`, `NVDA`, `AAPL`, `MSFT` | US stock | `yfinance` | `market,social,news,fundamentals` |
+
+Common GitHub Repository Variables:
+
+```text
+STOCK_LIST=APP,NVDA,AAPL
+TRADINGAGENTS_MARKET=auto
+TRADINGAGENTS_DATA_VENDOR=auto
+TRADINGAGENTS_US_ANALYSTS=market,social,news,fundamentals
+TRADINGAGENTS_ASTOCK_ANALYSTS=market,social,news,fundamentals,policy,hot_money,lockup
+TRADINGAGENTS_DEBUG=false
+```
+
 ### 3. 运行分析
 
 根据你选择的供应商修改 config：
