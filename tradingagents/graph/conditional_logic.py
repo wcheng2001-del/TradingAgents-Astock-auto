@@ -68,24 +68,30 @@ class ConditionalLogic:
         return "Msg Clear Lockup"
 
     def should_continue_debate(self, state: AgentState) -> str:
-        """Determine if debate should continue."""
+        """Determine if debate should continue.
 
-        if (
-            state["investment_debate_state"]["count"] >= 2 * self.max_debate_rounds
-        ):  # 3 rounds of back-and-forth between 2 agents
+        Route by debate turn count instead of English speaker text. Reports may
+        be forced to Chinese, so current_response can start with a localized
+        label rather than "Bull"/"Bear".
+        """
+
+        count = state["investment_debate_state"]["count"]
+        if count >= 2 * self.max_debate_rounds:
             return "Research Manager"
-        if state["investment_debate_state"]["current_response"].startswith("Bull"):
-            return "Bear Researcher"
-        return "Bull Researcher"
+        return "Bear Researcher" if count % 2 == 1 else "Bull Researcher"
 
     def should_continue_risk_analysis(self, state: AgentState) -> str:
-        """Determine if risk analysis should continue."""
-        if (
-            state["risk_debate_state"]["count"] >= 3 * self.max_risk_discuss_rounds
-        ):  # 3 rounds of back-and-forth between 3 agents
+        """Determine if risk analysis should continue.
+
+        Route by turn count instead of speaker text so Chinese report labels do
+        not break the graph path map.
+        """
+        count = state["risk_debate_state"]["count"]
+        if count >= 3 * self.max_risk_discuss_rounds:
             return "Portfolio Manager"
-        if state["risk_debate_state"]["latest_speaker"].startswith("Aggressive"):
+        remainder = count % 3
+        if remainder == 1:
             return "Conservative Analyst"
-        if state["risk_debate_state"]["latest_speaker"].startswith("Conservative"):
+        if remainder == 2:
             return "Neutral Analyst"
         return "Aggressive Analyst"

@@ -4,6 +4,7 @@ import os
 import re
 import smtplib
 import time
+import traceback
 import zipfile
 from datetime import datetime
 from email.message import EmailMessage
@@ -148,6 +149,7 @@ def run_stock(ticker: str, trade_date: str, output_root: Path) -> Path | None:
         final_state, decision = ta.propagate(ticker, trade_date)
     except Exception as exc:
         print(f"ERROR {ticker}: {exc}")
+        traceback.print_exc()
         return None
 
     ticker_dir = output_root / ticker
