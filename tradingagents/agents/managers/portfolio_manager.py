@@ -14,6 +14,8 @@ from tradingagents.agents.schemas import PortfolioDecision, render_pm_decision
 from tradingagents.agents.utils.agent_utils import (
     build_instrument_context,
     get_language_instruction,
+    is_astock_instrument,
+    market_scope_context,
 )
 from tradingagents.agents.utils.structured import (
     bind_structured,
@@ -33,7 +35,33 @@ def create_portfolio_manager(llm):
     structured_llm = bind_structured(llm, PortfolioDecision, "Portfolio Manager")
 
     def portfolio_manager_node(state) -> dict:
-        instrument_context = build_instrument_context(state["company_of_interest"])
+        company_name = state["company_of_interest"]
+        instrument_context = build_instrument_context(company_name)
+        market_scope = market_scope_context(company_name)
+        if is_astock_instrument(company_name):
+            trading_constraints = """**A-Stock Trading Constraints** (must factor into your decision):
+- T+1 settlement: shares bought today cannot be sold until the next trading day
+- Daily price limits: main board +/-10%, STAR/ChiNext +/-20%, Beijing Stock Exchange +/-30%.
+  Risk-warning stocks (ST/*ST) do NOT get a narrower band: since 2026-07-06 main-board
+  ST/*ST moved from +/-5% to +/-10% (same as ordinary main-board shares), and STAR/ChiNext
+  ST/*ST have always been +/-20%.
+- Newly listed stocks have NO price limit for their first 5 trading days (first day only
+  on the Beijing Stock Exchange) — this matters most for recently-IPO'd names.
+- Minimum lot size: 100 shares (1 手) on main board and ChiNext, in 100-share multiples;
+  STAR board is 200 shares minimum, incrementing by 1 share; Beijing Stock Exchange is
+  100 shares minimum, incrementing by 1 share.
+- Trading hours (Beijing time): opening call auction 09:15-09:25, continuous trading
+  09:30-11:30 and 13:00-14:57, closing call auction 14:57-15:00. Since 2026-07-06 the
+  after-hours fixed-price session (15:05-15:30, traded at the closing price) covers all
+  A-shares and ETFs.
+- ST/delisting risk: ST or *ST status signals regulatory warning; factor into position sizing
+- Margin eligibility: not all A-shares are margin-eligible; assume cash-only unless stated"""
+        else:
+            trading_constraints = """**US Stock Trading Constraints** (must factor into your decision):
+- Do not apply A-share-only T+1 China settlement, daily limit-up/limit-down, dragon-tiger-board, northbound-flow, ST label, or lockup/reduction frameworks.
+- Blank A-share policy, hot-money, or lockup/reduction reports are intentionally not applicable and must not be treated as hidden negative evidence.
+- Use US execution and risk drivers: regular session 09:30-16:00 US Eastern time, thinner pre-market/after-hours liquidity, earnings/guidance gaps, short interest, options/implied volatility, SEC filings, insider transactions, analyst revisions, Fed/rate sensitivity, and sector regulation.
+- Be explicit about uncertainty, but only penalize missing data when the missing data is relevant to US-listed equities."""
 
         history = state["risk_debate_state"]["history"]
         risk_debate_state = state["risk_debate_state"]
@@ -51,25 +79,11 @@ def create_portfolio_manager(llm):
 
 {instrument_context}
 
+{market_scope}
+
 ---
 
-**A-Stock Trading Constraints** (must factor into your decision):
-- T+1 settlement: shares bought today cannot be sold until the next trading day
-- Daily price limits: main board ±10%, STAR/ChiNext ±20%, Beijing Stock Exchange ±30%.
-  Risk-warning stocks (ST/*ST) do NOT get a narrower band: since 2026-07-06 main-board
-  ST/*ST moved from ±5% to ±10% (same as ordinary main-board shares), and STAR/ChiNext
-  ST/*ST have always been ±20%.
-- Newly listed stocks have NO price limit for their first 5 trading days (first day only
-  on the Beijing Stock Exchange) — this matters most for recently-IPO'd names.
-- Minimum lot size: 100 shares (1 手) on main board and ChiNext, in 100-share multiples;
-  STAR board is 200 shares minimum, incrementing by 1 share; Beijing Stock Exchange is
-  100 shares minimum, incrementing by 1 share.
-- Trading hours (Beijing time): opening call auction 09:15-09:25, continuous trading
-  09:30-11:30 and 13:00-14:57, closing call auction 14:57-15:00. Since 2026-07-06 the
-  after-hours fixed-price session (15:05-15:30, traded at the closing price) covers all
-  A-shares and ETFs.
-- ST/delisting risk: ST or *ST status signals regulatory warning; factor into position sizing
-- Margin eligibility: not all A-shares are margin-eligible; assume cash-only unless stated
+{trading_constraints}
 
 ---
 

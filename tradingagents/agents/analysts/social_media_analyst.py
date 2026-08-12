@@ -1,19 +1,28 @@
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from tradingagents.agents.utils.agent_utils import build_instrument_context, get_language_instruction, get_news
+from tradingagents.agents.utils.agent_utils import (
+    build_instrument_context,
+    get_language_instruction,
+    get_news,
+    is_astock_instrument,
+    market_scope_context,
+)
 from tradingagents.dataflows.config import get_config
 
 
 def create_social_media_analyst(llm):
     def social_media_analyst_node(state):
         current_date = state["trade_date"]
-        instrument_context = build_instrument_context(state["company_of_interest"])
+        company_name = state["company_of_interest"]
+        instrument_context = build_instrument_context(company_name)
+        market_scope = market_scope_context(company_name)
 
         tools = [
             get_news,
         ]
 
-        system_message = (
-            "你是一位专注于 A 股市场的市场情绪分析师。你的任务是通过分析公司相关新闻、市场讨论和公众情绪，判断市场对目标公司的整体态度和情绪走向。"
+        if is_astock_instrument(company_name):
+            system_message = (
+                "你是一位专注于 A 股市场的市场情绪分析师。你的任务是通过分析公司相关新闻、市场讨论和公众情绪，判断市场对目标公司的整体态度和情绪走向。"
             "\n\n⚠️ A 股情绪分析框架："
             "\n- **散户情绪权重高**：A 股散户占比超过 60%，市场情绪对股价的短期影响远大于成熟市场。恐慌和贪婪的情绪波动更剧烈。"
             "\n- **舆论阵地**：东方财富股吧、雪球、同花顺社区是 A 股投资者最活跃的讨论平台。分析新闻时注意推断这些平台可能的情绪反应。"
@@ -29,7 +38,27 @@ def create_social_media_analyst(llm):
             "\n4. 情绪评分（极度悲观/悲观/中性/乐观/极度乐观）"
             "\n5. 情绪趋势变化方向（升温/降温/平稳）"
             + get_language_instruction()
-        )
+            )
+        else:
+            system_message = (
+                "你是一位专注于美股市场的市场情绪分析师。你的任务是通过新闻、市场讨论和公开情绪信号，判断市场对目标公司的整体态度和情绪走向。"
+                f"\n\n{market_scope}"
+                "\n\n⚠️ 美股情绪分析框架："
+                "\n- **机构与散户共振**：关注分析师评级、估值预期、财报后反应、社交媒体热度、ETF/板块资金偏好和期权情绪。"
+                "\n- **舆论来源**：重点从财经新闻、公司公告、分析师观点、主流投资社区和社交讨论中推断情绪变化。"
+                "\n- **事件敏感度**：财报、指引、产品发布、监管/诉讼、宏观利率和同业表现通常比 A 股式题材炒作更关键。"
+                "\n- **反向指标**：当看多或看空情绪过度一致时，结合估值、成交量、短空/期权信号判断是否存在反转风险。"
+                "\n- **范围约束**：不要使用 A 股散户占比、涨停接力、东方财富股吧、龙虎榜、游资、北向资金、解禁/减持或 ST 框架。"
+                "\n\n请使用 `get_news(ticker, start_date, end_date)` 工具获取公司相关新闻和市场讨论，ticker 必须使用目标股票代码。从新闻内容中推断市场情绪方向、强度和可能的转折点。"
+                "\n\n撰写详细的市场情绪分析报告，包含情绪评分（极度悲观/悲观/中性/乐观/极度乐观）和趋势判断。报告末尾附 Markdown 表格汇总情绪信号和结论。"
+                "\n\n📋 必采清单 — 以下数据点必须出现在报告中，无法获取时标注 [数据缺失: xxx]："
+                "\n1. 新闻检索条数和时间范围"
+                "\n2. 正面/负面/中性新闻比例"
+                "\n3. 排名前 3 的舆情主题"
+                "\n4. 情绪评分（极度悲观/悲观/中性/乐观/极度乐观）"
+                "\n5. 情绪趋势变化方向（升温/降温/平稳）"
+                + get_language_instruction()
+            )
 
         prompt = ChatPromptTemplate.from_messages(
             [

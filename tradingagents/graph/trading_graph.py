@@ -45,6 +45,7 @@ from tradingagents.agents.utils.agent_utils import (
     get_dragon_tiger_board,
     get_lockup_expiry,
     get_industry_comparison,
+    filter_analysts_for_market,
 )
 
 from .checkpointer import checkpoint_step, clear_checkpoint, get_checkpointer, thread_id
@@ -132,6 +133,17 @@ class TradingAgentsGraph:
         self.curr_state = None
         self.ticker = None
         self.log_states_dict = {}  # date to full state dict
+
+        market_type = self.config.get("market_type", "a_stock")
+        filtered_analysts = filter_analysts_for_market(selected_analysts, market_type)
+        if filtered_analysts != list(selected_analysts or []):
+            logger.info(
+                "Filtered A-share-only analysts for market_type=%s: %s -> %s",
+                market_type,
+                selected_analysts,
+                filtered_analysts,
+            )
+        selected_analysts = filtered_analysts
 
         # Set up the graph: keep the workflow for recompilation with a checkpointer.
         self.workflow = self.graph_setup.setup_graph(selected_analysts)

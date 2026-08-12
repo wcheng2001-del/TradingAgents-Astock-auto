@@ -4,6 +4,8 @@ from tradingagents.agents.utils.agent_utils import (
     get_global_news,
     get_language_instruction,
     get_news,
+    is_astock_instrument,
+    market_scope_context,
 )
 from tradingagents.dataflows.config import get_config
 
@@ -11,15 +13,18 @@ from tradingagents.dataflows.config import get_config
 def create_news_analyst(llm):
     def news_analyst_node(state):
         current_date = state["trade_date"]
-        instrument_context = build_instrument_context(state["company_of_interest"])
+        company_name = state["company_of_interest"]
+        instrument_context = build_instrument_context(company_name)
+        market_scope = market_scope_context(company_name)
 
         tools = [
             get_news,
             get_global_news,
         ]
 
-        system_message = (
-            "你是一位专注于 A 股市场的新闻与政策分析师。你的任务是分析近期新闻动态，评估其对目标公司和 A 股市场的影响。"
+        if is_astock_instrument(company_name):
+            system_message = (
+                "你是一位专注于 A 股市场的新闻与政策分析师。你的任务是分析近期新闻动态，评估其对目标公司和 A 股市场的影响。"
             "\n\n⚠️ A 股新闻分析框架："
             "\n- **政策敏感度**：A 股是典型的「政策市」，国务院/证监会/央行/发改委的政策发布对市场影响巨大。重点关注：货币政策（降准降息）、产业政策（扶持/限制）、监管政策（IPO 节奏、再融资、减持新规）。"
             "\n- **消息来源权重**：财联社快讯（最快）> 新华财经/证券时报（权威）> 东方财富/同花顺（广泛）。注意区分官方消息与市场传闻。"
@@ -36,7 +41,28 @@ def create_news_analyst(llm):
             "\n4. 利好/利空/中性事件分类统计"
             "\n5. 风险事件清单（如有）"
             + get_language_instruction()
-        )
+            )
+        else:
+            system_message = (
+                "你是一位专注于美股市场的新闻分析师。你的任务是分析近期新闻、公司事件和宏观动态，评估其对目标公司和美股市场的影响。"
+                f"\n\n{market_scope}"
+                "\n\n⚠️ 美股新闻分析框架："
+                "\n- **公司事件**：重点关注财报、业绩指引、管理层评论、产品发布、订单/客户变化、回购/分红和重大并购。"
+                "\n- **监管与披露**：关注 SEC 文件、诉讼、反垄断、出口管制、行业监管、内幕交易披露和分析师评级调整。"
+                "\n- **宏观与板块**：关注 Fed/利率、美元、通胀、行业景气、客户资本开支和同业表现。"
+                "\n- **事件驱动**：区分短期价格催化、基本面变化和纯情绪噪音。不要使用 A 股政策市、龙虎榜、游资、北向资金、解禁/减持或 ST 框架。"
+                "\n\n请使用以下工具："
+                "\n- `get_news(ticker, start_date, end_date)`：获取公司相关新闻，ticker 必须使用目标股票代码"
+                "\n- `get_global_news(curr_date, look_back_days, limit)`：获取宏观经济和市场整体新闻"
+                "\n\n撰写全面的新闻分析报告，区分利好/利空/中性消息，评估影响程度和持续时间。报告末尾附 Markdown 表格汇总关键新闻事件及其影响评级。"
+                "\n\n📋 必采清单 — 以下数据点必须出现在报告中，无法获取时标注 [数据缺失: xxx]："
+                "\n1. 个股新闻条数和时间范围"
+                "\n2. 宏观新闻条数和时间范围"
+                "\n3. 关键事件时间线（至少列出 3 个重要事件及日期）"
+                "\n4. 利好/利空/中性事件分类统计"
+                "\n5. 风险事件清单（如有）"
+                + get_language_instruction()
+            )
 
         prompt = ChatPromptTemplate.from_messages(
             [

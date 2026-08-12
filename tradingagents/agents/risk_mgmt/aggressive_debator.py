@@ -1,6 +1,12 @@
 
 
-from tradingagents.agents.utils.agent_utils import get_language_instruction, speaker_prefix
+from tradingagents.agents.utils.agent_utils import (
+    astock_special_reports_context,
+    get_language_instruction,
+    is_astock_instrument,
+    market_scope_context,
+    speaker_prefix,
+)
 
 
 def create_aggressive_debator(llm):
@@ -21,16 +27,38 @@ def create_aggressive_debator(llm):
         lockup_report = state.get("lockup_report", "")
 
         trader_decision = state["trader_investment_plan"]
+        company_name = state["company_of_interest"]
+        market_scope = market_scope_context(company_name)
+        special_reports = astock_special_reports_context(
+            company_name,
+            policy_report,
+            hot_money_report,
+            lockup_report,
+        )
 
-        prompt = f"""As the Aggressive Risk Analyst evaluating an A-share (China mainland) stock, your role is to champion high-reward opportunities and bold strategies. Focus on the potential upside, growth potential, and momentum—even when these come with elevated risk. Counter the conservative and neutral analysts with data-driven rebuttals.
-
-A-Share Aggressive Framework — leverage these China-specific upside arguments:
+        if is_astock_instrument(company_name):
+            risk_framework = """A-Share Aggressive Framework — leverage these China-specific upside arguments:
 - Limit-Up Momentum (涨停板效应): In A-shares, consecutive limit-ups create powerful momentum; T+1 actually helps by preventing same-day profit-taking, allowing multi-day runs
 - Policy-Driven Sectors: When Beijing backs a sector (e.g. AI, chips, new energy), the policy put is real — government support creates a floor that doesn't exist in Western markets
 - Hot Money Conviction: When top hot money seats (游资席位) pile in with strong reason tags, the short-term upside can be explosive; missing these moves is also a risk
 - Northbound Validation: If foreign institutions via Stock Connect are net buying alongside domestic momentum, this dual confirmation is a strong signal
 - PE Expansion Phase: In A-share bull cycles, PEs routinely expand to 50-100x for thematic leaders; applying US-market valuation discipline too early means missing the main move
-- Retail Sentiment Tailwind: A-shares are 80% retail; when sentiment turns positive, the herd effect amplifies gains far beyond what fundamentals alone would suggest
+- Retail Sentiment Tailwind: A-shares are 80% retail; when sentiment turns positive, the herd effect amplifies gains far beyond what fundamentals alone would suggest"""
+            closing_instruction = "Engage actively, debate persuasively, and assert why aggressive positioning is optimal for this A-share opportunity."
+        else:
+            risk_framework = """US Stock Aggressive Framework — leverage these US-market upside arguments:
+- Earnings Upside: Beat-and-raise potential, improving margins, backlog strength, product-cycle acceleration, or management guidance conservatism
+- Institutional Momentum: Analyst upgrades, estimate revisions, relative strength, ETF/sector inflows, short-covering risk, and constructive options positioning
+- Fundamental Optionality: Buybacks, free cash flow, recurring revenue, operating leverage, market-share gains, or strategic partnerships
+- Macro/Sector Tailwinds: Fed/rate relief, customer capex recovery, regulatory clarity, AI/cloud/software adoption, and peer multiple expansion
+- Execution Risk Is Real: Do not dismiss risk, but do not manufacture A-share policy/hot-money/lockup concerns for US tickers."""
+            closing_instruction = "Engage actively, debate persuasively, and assert why aggressive positioning can be justified under a US-stock framework."
+
+        prompt = f"""As the Aggressive Risk Analyst evaluating this stock, your role is to champion high-reward opportunities and bold strategies. Focus on the potential upside, growth potential, and momentum—even when these come with elevated risk. Counter the conservative and neutral analysts with data-driven rebuttals.
+
+{market_scope}
+
+{risk_framework}
 
 Here is the trader's decision:
 
@@ -42,12 +70,10 @@ Market Research Report: {market_research_report}
 Social Media Sentiment Report: {sentiment_report}
 Latest News Report: {news_report}
 Company Fundamentals Report: {fundamentals_report}
-Policy Analysis Report: {policy_report}
-Hot Money / Capital Flow Report: {hot_money_report}
-Lockup Expiry / Insider Reduction Report: {lockup_report}
+{special_reports}
 Conversation history: {history} Last conservative argument: {current_conservative_response} Last neutral argument: {current_neutral_response}. If no responses yet, present your own argument.
 
-Engage actively, debate persuasively, and assert why aggressive positioning is optimal for this A-share opportunity. Output conversationally without special formatting.
+{closing_instruction} Output conversationally without special formatting.
 {get_language_instruction()}"""
 
         response = llm.invoke(prompt)

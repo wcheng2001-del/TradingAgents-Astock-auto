@@ -1,6 +1,12 @@
 
 
-from tradingagents.agents.utils.agent_utils import get_language_instruction, speaker_prefix
+from tradingagents.agents.utils.agent_utils import (
+    astock_special_reports_context,
+    get_language_instruction,
+    is_astock_instrument,
+    market_scope_context,
+    speaker_prefix,
+)
 
 
 def create_bear_researcher(llm):
@@ -18,16 +24,38 @@ def create_bear_researcher(llm):
         hot_money_report = state.get("hot_money_report", "")
         lockup_report = state.get("lockup_report", "")
         data_quality_summary = state.get("data_quality_summary", "")
+        company_name = state["company_of_interest"]
+        market_scope = market_scope_context(company_name)
+        special_reports = astock_special_reports_context(
+            company_name,
+            policy_report,
+            hot_money_report,
+            lockup_report,
+        )
 
-        prompt = f"""You are a Bear Analyst making the case against investing in this A-share (China mainland) stock. Your goal is to present a well-reasoned argument emphasizing risks, challenges, and negative indicators unique to the Chinese market. Leverage the provided research and data to highlight potential downsides and counter bullish arguments effectively.
-
-A-Share Bear Framework — prioritize these China-specific risk factors:
+        if is_astock_instrument(company_name):
+            bear_framework = """A-Share Bear Framework — prioritize these China-specific risk factors:
 - Policy Headwinds: Sudden regulatory crackdowns (e.g. industry rectification, antitrust), CSRC window guidance (窗口指导), sector-wide trading restrictions, or political risk signals
 - Lockup & Insider Selling: Upcoming lockup expiry dates with large overhang, controlling shareholders in pre-disclosure reduction windows, equity pledge liquidation risk
 - Hot Money Withdrawal (游资撤退): Volume divergence after limit-ups (放量滞涨), declining limit-up board count (连板断裂), sector rotation moving away from this theme
 - Valuation Bubble: PE far above 30x A-stock growth anchor with EPS unable to digest within 3 years, PEG > 2 indicating overpriced growth, retail-driven speculative premium
 - T+1 Trap: After a sharp rally, buyers today cannot exit until tomorrow — if sentiment reverses overnight or a gap-down opens, losses are locked in
-- Northbound Retreat: Net outflow from Stock Connect signals foreign institutions reducing exposure
+- Northbound Retreat: Net outflow from Stock Connect signals foreign institutions reducing exposure"""
+            closing_instruction = "Deliver a compelling bear argument grounded in A-share market realities. Refute the bull's claims and demonstrate the risks of investing in this stock within the Chinese regulatory and market structure."
+        else:
+            bear_framework = """US Stock Bear Framework — prioritize these US-market downside risks:
+- Earnings and Guidance Risk: Misses, cuts, margin compression, weak backlog, customer concentration, or demand pull-forward
+- Valuation Compression: Multiples stretched versus growth, rising discount rates, peer derating, or weakening estimate revisions
+- Disclosure and Governance Risk: SEC filings, accounting quality, insider selling, dilution, legal exposure, or regulatory investigation
+- Market Positioning Risk: Crowded ownership, short-interest signals, options/implied-volatility stress, and liquidity gaps around earnings
+- Macro/Sector Headwinds: Fed/rate sensitivity, sector regulation, antitrust/export-control risk, customer capex cuts, or peer weakness"""
+            closing_instruction = "Deliver a compelling bear argument grounded in US-market realities. Do not argue that blank A-share policy, hot-money, or lockup/reduction reports are bearish evidence."
+
+        prompt = f"""You are a Bear Analyst making the case against investing in this stock. Your goal is to present a well-reasoned argument emphasizing risks, challenges, and negative indicators relevant to the active market. Leverage the provided research and data to highlight potential downsides and counter bullish arguments effectively.
+
+{market_scope}
+
+{bear_framework}
 
 General bear points:
 - Risks and Challenges: Market saturation, financial instability, or macroeconomic threats
@@ -41,16 +69,14 @@ Market research report: {market_research_report}
 Social media sentiment report: {sentiment_report}
 Latest news report: {news_report}
 Company fundamentals report: {fundamentals_report}
-Policy analysis report: {policy_report}
-Hot money / capital flow report: {hot_money_report}
-Lockup expiry / insider reduction report: {lockup_report}
+{special_reports}
 Data quality assessment: {data_quality_summary}
 Conversation history of the debate: {history}
 Last bull argument: {current_response}
 
 ⚠️ If the data quality assessment flags any report as low-confidence (grade C/D/F), reduce your reliance on that report and note the data limitation in your argument.
 
-Deliver a compelling bear argument grounded in A-share market realities. Refute the bull's claims and demonstrate the risks of investing in this stock within the Chinese regulatory and market structure.
+{closing_instruction}
 {get_language_instruction()}
 """
 

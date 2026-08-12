@@ -3,7 +3,12 @@
 from __future__ import annotations
 
 from tradingagents.agents.schemas import ResearchPlan, render_research_plan
-from tradingagents.agents.utils.agent_utils import build_instrument_context, get_language_instruction
+from tradingagents.agents.utils.agent_utils import (
+    build_instrument_context,
+    get_language_instruction,
+    is_astock_instrument,
+    market_scope_context,
+)
 from tradingagents.agents.utils.structured import (
     bind_structured,
     invoke_structured_or_freetext,
@@ -14,7 +19,23 @@ def create_research_manager(llm):
     structured_llm = bind_structured(llm, ResearchPlan, "Research Manager")
 
     def research_manager_node(state) -> dict:
-        instrument_context = build_instrument_context(state["company_of_interest"])
+        company_name = state["company_of_interest"]
+        instrument_context = build_instrument_context(company_name)
+        market_scope = market_scope_context(company_name)
+        if is_astock_instrument(company_name):
+            market_note = (
+                "Note: This is an A-share (China mainland) stock. Factor in regulatory "
+                "policy impact, hot money / capital flow dynamics, and lockup expiry / "
+                "insider reduction risks when synthesising the debate."
+            )
+        else:
+            market_note = (
+                "Note: This is a US stock. Do not penalize the investment plan for "
+                "missing A-share-only policy, hot-money, or lockup/reduction reports. "
+                "Synthesize the debate using US-relevant evidence such as earnings, "
+                "guidance, SEC disclosures, analyst revisions, insider transactions, "
+                "short interest, options sentiment, sector regulation, and macro/rate risk."
+            )
         history = state["investment_debate_state"].get("history", "")
 
         investment_debate_state = state["investment_debate_state"]
@@ -23,7 +44,9 @@ def create_research_manager(llm):
 
 {instrument_context}
 
-Note: This is an A-share (China mainland) stock. Factor in regulatory policy impact, hot money / capital flow dynamics, and lockup expiry / insider reduction risks when synthesising the debate.
+{market_scope}
+
+{market_note}
 
 ---
 

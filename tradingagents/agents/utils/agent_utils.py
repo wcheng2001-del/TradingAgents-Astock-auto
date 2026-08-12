@@ -1,3 +1,5 @@
+import re
+
 from langchain_core.messages import HumanMessage, RemoveMessage
 
 # Import tools from separate utility files
@@ -101,6 +103,102 @@ def build_instrument_context(ticker: str) -> str:
         "When a tool argument is named `ticker`, pass only this ticker value; "
         "do not pass company names, sectors, concepts, or search keywords."
     )
+
+
+ASTOCK_ONLY_ANALYSTS = {"policy", "hot_money", "lockup"}
+
+
+def normalize_market_type(value: str | None) -> str:
+    """Normalize market config aliases used across CLI, env vars, and agents."""
+    if not value:
+        return ""
+    normalized = str(value).strip().lower().replace("-", "_")
+    if normalized in {"a_stock", "astock", "cn", "china"}:
+        return "a_stock"
+    if normalized in {"us", "us_stock", "usa", "yfinance"}:
+        return "us_stock"
+    if normalized == "auto":
+        return ""
+    return normalized
+
+
+def detect_instrument_market(ticker: str) -> str:
+    """Infer whether a ticker should use the A-share or US-stock analysis frame."""
+    try:
+        from tradingagents.dataflows.config import get_config
+
+        configured = normalize_market_type(get_config().get("market_type"))
+    except Exception:
+        configured = ""
+
+    if configured in {"a_stock", "us_stock"}:
+        return configured
+
+    normalized = str(ticker or "").strip().upper()
+    if re.fullmatch(r"\d{6}", normalized):
+        return "a_stock"
+    return "us_stock"
+
+
+def is_astock_instrument(ticker: str) -> bool:
+    return detect_instrument_market(ticker) == "a_stock"
+
+
+def filter_analysts_for_market(selected_analysts, market_type: str | None):
+    """Remove A-share-only analysts when the active market is not A-share."""
+    normalized = normalize_market_type(market_type) or "a_stock"
+    analysts = list(selected_analysts or [])
+    if normalized == "us_stock":
+        return [name for name in analysts if name not in ASTOCK_ONLY_ANALYSTS]
+    return analysts
+
+
+def market_scope_context(ticker: str) -> str:
+    """Return market-specific instructions shared by debate and decision agents."""
+    if is_astock_instrument(ticker):
+        return (
+            "Market scope: A-share (China mainland) stock. Apply China-specific "
+            "market structure, including policy sensitivity, hot-money/capital-flow "
+            "signals, lockup expiry or insider reduction overhang, T+1 settlement, "
+            "and daily price-limit mechanics when supported by the available data."
+        )
+
+    return (
+        "Market scope: US stock. Do not apply A-share-only factors such as China "
+        "policy-market scoring, hot-money/dragon-tiger-board behavior, northbound "
+        "Stock Connect flow, lockup-expiry calendars, A-share reduction rules, "
+        "T+1 China trading constraints, daily limit-up/limit-down mechanics, or "
+        "ST/delisting labels. If policy, hot_money, or lockup/reduction reports "
+        "are blank, treat them as intentionally not applicable, not as hidden "
+        "negative evidence or an unobservable-risk penalty. Use US-relevant factors "
+        "instead: earnings and guidance, SEC filings, analyst revisions, insider "
+        "transactions, short interest, options/implied volatility, sector regulation, "
+        "Fed/rate sensitivity, and liquidity around regular and extended sessions."
+    )
+
+
+def astock_special_reports_context(
+    ticker: str,
+    policy_report: str = "",
+    hot_money_report: str = "",
+    lockup_report: str = "",
+) -> str:
+    """Build the optional A-share specialist report block for prompts."""
+    if not is_astock_instrument(ticker):
+        return (
+            "A-share-only specialist reports: intentionally skipped for this US stock. "
+            "Do not infer bearish risk from missing policy, hot-money, or lockup/"
+            "reduction reports."
+        )
+
+    parts = []
+    if policy_report:
+        parts.append(f"Policy Analysis Report:\n{policy_report}")
+    if hot_money_report:
+        parts.append(f"Hot Money / Capital Flow Report:\n{hot_money_report}")
+    if lockup_report:
+        parts.append(f"Lockup Expiry / Insider Reduction Report:\n{lockup_report}")
+    return "\n\n".join(parts)
 
 def create_msg_delete():
     def delete_messages(state):
